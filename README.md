@@ -37,7 +37,7 @@ You can choose to add the library through SPM or Cocoapods:
     let package = Package(
         /* Your package name, supported platforms, and generated products go here */
         dependencies: [
-            .package(url: "https://github.com/dehesa/CodableCSV.git", from: "0.6.3")
+            .package(url: "https://github.com/dehesa/CodableCSV.git", from: "0.6.6")
         ],
         targets: [
             .target(name: /* Your target name here */, dependencies: ["CodableCSV"])
@@ -48,7 +48,7 @@ You can choose to add the library through SPM or Cocoapods:
 -   [Cocoapods](https://cocoapods.org).
 
     ```
-    pod 'CodableCSV', '~> 0.6.3'
+    pod 'CodableCSV', '~> 0.6.6'
     ```
 
 </p></details>
@@ -365,11 +365,10 @@ let decoder = CSVDecoder {
     $0.delimiters.field = "\t"
     $0.headerStrategy = .firstLine
     $0.bufferingStrategy = .keepAll
-}
-
-decoder.decimalStrategy = .custom { (decoder) in
-    let value = try Float(from: decoder)
-    return Decimal(value)
+    $0.decimalStrategy = .custom({ (decoder) in
+        let value = try Float(from: decoder)
+        return Decimal(value)
+    })
 }
 ```
 
@@ -458,13 +457,12 @@ let encoder = CSVEncoder {
     $0.delimiters = (field: ";", row: "\r\n")
     $0.dateStrategy = .iso8601
     $0.bufferingStrategy = .sequential
-}
-
-encoder.floatStrategy = .convert(positiveInfinity: "∞", negativeInfinity: "-∞", nan: "≁")
-encoder.dataStrategy = .custom { (data, encoder) in
-    let string = customTransformation(data)
-    var container = try encoder.singleValueContainer()
-    try container.encode(string)
+    $0.floatStrategy = .convert(positiveInfinity: "∞", negativeInfinity: "-∞", nan: "≁")
+    $0.dataStrategy = .custom({ (data, encoder) in
+        let string = customTransformation(data)
+        var container = try encoder.singleValueContainer()
+        try container.encode(string)
+    })
 }
 ```
 
@@ -576,7 +574,7 @@ struct Student: Codable {
     var age: Int
     var hasPet: Bool
 
-    private CodingKeys: Int, CodingKey {
+    private enum CodingKeys: Int, CodingKey {
         case name = 0
         case age = 1
         case hasPet = 2
@@ -692,7 +690,7 @@ To configure the encoding/decoding process, you need to set the configuration va
     ```swift
     var config = CSVDecoder.Configuration()
     config.nilStrategy = .empty
-    config.decimalStrategy = .local(.current)
+    config.decimalStrategy = .locale(.current)
     config.dataStrategy = .base64
     config.bufferingStrategy = .sequential
     config.trimStrategy = .whitespaces
@@ -707,7 +705,7 @@ To configure the encoding/decoding process, you need to set the configuration va
     ```swift
     let decoder = CSVDecoder {
         $0.nilStrategy = .empty
-        $0.decimalStrategy = .local(.current)
+        $0.decimalStrategy = .locale(.current)
         // and so on and so forth
     }
     ```
@@ -731,6 +729,32 @@ decoder.nilStrategy = .custom({ (encoder) in
     var container = encoder.singleValueContainer()
     try container.encode("null")
 })
+```
+
+</p></details>
+
+<details><summary>Type-safe headers row.</summary><p>
+
+You can generate type-safe name headers using Swift introspection tools (i.e. `Mirror`) or explicitly defining the `CodingKey` enum with `String` raw value conforming to `CaseIterable`.
+
+```swift
+struct Student {
+    var name: String
+    var age: Int
+    var hasPet: Bool
+
+    enum CodingKeys: String, CodingKey, CaseIterable {
+        case name, age, hasPet
+    }
+}
+```
+
+Then configure your encoder with explicit headers.
+
+```swift
+let encoder = CSVEncoder {
+    $0.headers = Student.CodingKeys.allCases.map { $0.rawValue }
+}
 ```
 
 </p></details>

@@ -19,9 +19,9 @@ public final class CSVReader: IteratorProtocol, Sequence {
     /// The unicode scalar decoder providing all input data.
     private let _decoder: ScalarDecoder
     /// Check whether the given unicode scalar is part of the field delimiter sequence.
-    private let _isFieldDelimiter: DelimiterChecker
+    private let _isFieldDelimiter: Delimiter.Scalars.Checker
     /// Check whether the given unicode scalar is par of the row delimiter sequence.
-    private let _isRowDelimiter: DelimiterChecker
+    private let _isRowDelimiter: Delimiter.Scalars.Checker
     /// The amount of rows (counting the header row) that have been read and the amount of fields that should be in each row.
     internal private(set) var count: (rows: Int, fields: Int)
     /// The reader status indicating whether there are remaning lines to read, the CSV has been completely parsed, or an error occurred and no further operation shall be performed.
@@ -40,8 +40,8 @@ public final class CSVReader: IteratorProtocol, Sequence {
         self._fieldBuffer = .init()
         self._fieldBuffer.reserveCapacity(128)
         self._decoder = decoder
-        self._isFieldDelimiter = CSVReader.makeMatcher(delimiter: self._settings.delimiters.field, buffer: self._scalarBuffer, decoder: self._decoder)
-        self._isRowDelimiter = CSVReader.makeMatcher(delimiter: self._settings.delimiters.row, buffer: self._scalarBuffer, decoder: self._decoder)
+        self._isFieldDelimiter = self._settings.delimiters.makeFieldMatcher(buffer: self._scalarBuffer, decoder: self._decoder)
+        self._isRowDelimiter = self._settings.delimiters.makeRowMatcher(buffer: self._scalarBuffer, decoder: self._decoder)
         self.count = (0, 0)
         self.status = .active
         
@@ -107,29 +107,39 @@ extension CSVReader {
         case .failed(let e): throw e
         }
         
-        let result: [String]?
-        do {
-            result = try self._parseLine(rowIndex: self.count.rows)
-        } catch let error {
-            self.status = .failed(error as! CSVError<CSVReader>)
-            throw error
-        }
-        
-        guard let numFields = result?.count else {
-            self.status = .finished
-            return nil
-        }
-        
-        if self.count.rows > 0 {
-            guard self.count.fields == numFields else {
-                throw Error._invalidFieldCount(rowIndex: self.count.rows+1, parsed: numFields, expected: self.count.fields)
+        loop: while true {
+            let result: [String]?
+            do {
+                result = try self._parseLine(rowIndex: self.count.rows)
+            } catch let error {
+                self.status = .failed(error as! CSVError<CSVReader>)
+                throw error
             }
-        } else {
-            self.count.fields = numFields
+            // If no fields were parsed, the EOF has been reached.
+            guard let fields = result else {
+                self.status = .finished
+                return nil
+            }
+            
+            let numFields = fields.count
+            // If a single empty field is received, a white line has been parsed. Ignore empty lines for CSV files were several fields are expected.
+            if numFields == 1, fields.first!.isEmpty, self.count.rows != 1 {
+                continue loop
+            }
+            
+            if self.count.rows > 0 {
+                guard self.count.fields == numFields else {
+                    let error = Error._invalidFieldCount(rowIndex: self.count.rows+1, parsed: numFields, expected: self.count.fields)
+                    self.status = .failed(error)
+                    throw error
+                }
+            } else {
+                self.count.fields = numFields
+            }
+
+            self.count.rows += 1
+            return result
         }
-        
-        self.count.rows += 1
-        return result
     }
 }
 
@@ -275,7 +285,8 @@ extension CSVReader {
                 reachedRowsEnd = true
                 break
             } else {
-                throw Error._invalidEscapedField(rowIndex: rowIndex)
+                let targetField = String(decoding: self._fieldBuffer.flatMap { UTF8.encode($0)! }, as: UTF8.self)
+                throw Error._invalidEscapedField(rowIndex: rowIndex, field: targetField, nextScalar: followingScalar)
             }
         }
 
@@ -307,7 +318,7 @@ fileprivate extension CSVReader.Error {
     static func _invalidFieldCount(rowIndex: Int, parsed: Int, expected: Int) -> CSVError<CSVReader> {
         .init(.invalidInput,
               reason: "The number of fields is not constant between rows.",
-              help: "Make sure the CSV file has always the same amount of fields per row.",
+              help: "Make sure the CSV file has always the same amount of fields per row (including the header row).",
               userInfo: ["Row index": rowIndex,
                          "Number of parsed fields": parsed,
                          "Number of expected fields": expected])
@@ -316,24 +327,26 @@ fileprivate extension CSVReader.Error {
     /// - parameter rowIndex: The location of the row which generated the error.
     static func _invalidUnescapedField(rowIndex: Int) -> CSVError<CSVReader> {
         .init(.invalidInput,
-              reason: "Quotes aren't allowed within fields which don't start with quotes.",
-              help: "Sandwich the targeted field with quotes and escape the quote within the field.",
+              reason: "The escaping scalar (double quotes by default) is not allowed within fields which aren't already escaped.",
+              help: "Add the escaping scalar at the very beginning and the very end of the field and escape the escaping scalar found within the field.",
               userInfo: ["Row index": rowIndex])
     }
     /// Error raised when an EOF has been received but the last CSV field was not finalized.
     /// - parameter rowIndex: The location of the row which generated the error.
     static func _invalidEOF(rowIndex: Int) -> CSVError<CSVReader> {
         .init(.invalidInput,
-              reason: "The last field is escaped (through quotes) and an EOF (End of File) was encountered before the field was properly closed (with a final quote character).",
-              help: "End the targeted field with a quote.",
+              reason: "The last field is escaped (with double quotes if you haven't changed the defaults) and an EOF (End of File) was encountered before the field matched at the end with the closing escaping scalar.",
+              help: "End the targeted field with the scaping scalar (double quotes by default).",
               userInfo: ["Row index": rowIndex])
     }
     /// Error raised when an escaped field hasn't been properly finalized.
     /// - parameter rowIndex: The location of the row which generated the error.
-    static func _invalidEscapedField(rowIndex: Int) -> CSVError<CSVReader> {
+    /// - parameter field: The content of the escaped field.
+    static func _invalidEscapedField(rowIndex: Int, field: String, nextScalar: Unicode.Scalar) -> CSVError<CSVReader> {
         .init(.invalidInput,
-              reason: "The last field is escaped (through quotes) and an EOF (End of File) was encountered before the field was properly closed (with a final quote character).",
-              help: "End the targeted field with a quote.",
-              userInfo: ["Row index": rowIndex])
+              reason: "The targeted field parsed successfully. However, the character right after it was not a field nor row delimiter.",
+              help: (nextScalar == "\r") ? #"If your CSV is CRLF, change the row delimiter to "\r\n" or add a trim strategy for "\r"."#
+                                         : "There seems to be some characters after the escaping character and before the next field or the end of the row. Please remove those.",
+              userInfo: ["Row index": rowIndex, "Field": field])
     }
 }
