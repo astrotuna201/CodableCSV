@@ -1,10 +1,10 @@
-// swift-tools-version:5.3
+// swift-tools-version:6.0
 import PackageDescription
 
 let package = Package(
   name: "CodableCSV",
   platforms: [
-    .macOS(.v10_10), .iOS(.v11), .tvOS(.v9), .watchOS(.v2)
+    .macOS(.v13), .iOS(.v12), .tvOS(.v12), .watchOS(.v4)
   ],
   products: [
     .library(name: "CodableCSV", targets: ["CodableCSV"]),

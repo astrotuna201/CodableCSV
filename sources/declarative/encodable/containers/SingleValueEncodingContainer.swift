@@ -188,11 +188,17 @@ extension ShadowEncoder.SingleValueContainer {
 
   /// Encodes a single value of the given type.
   /// - parameter value: The value to encode.
-  mutating func encode(_ value: Decimal) throws {
+    @available(macOS 12.0, *)
+    mutating func encode(_ value: Decimal) throws {
     switch self._encoder.sink._withUnsafeGuaranteedRef({ $0.configuration.decimalStrategy }) {
     case .locale(let locale):
-      var number = value
-      let string = NSDecimalString(&number, locale)
+      var format = Decimal.FormatStyle(locale: Locale(identifier: "en_US_POSIX"))
+      if let locale {
+          format = Decimal.FormatStyle(locale: Locale(identifier: locale.identifier))
+      }
+      //let format = Decimal.FormatStyle(locale: Locale( //Locale(identifier: "en_US_POSIX"))
+// crashes      let string = NSDecimalString(&number, locale)
+      let string = value.formatted(format)
       try self.encode(string)
     case .custom(let closure):
       try closure(value, self._encoder)

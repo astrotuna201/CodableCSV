@@ -1,7 +1,7 @@
 import Foundation
 
 /// Sequentially writes string values and/or array of strings into a CSV file format.
-public final class CSVWriter {
+public final class CSVWriter: @unchecked Sendable {
   /// Recipe detailing how to write the CSV information (i.e. delimiters, date strategy, etc.).
   public let configuration: Configuration
   /// Internal writer settings extracted from the public `configuration` and other values inferred during initialization.

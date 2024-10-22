@@ -53,8 +53,8 @@ extension ReaderInferenceTests {
   }
 
   func test_Settings_Delimiters_infer() throws {
-    let fieldDelimiters: [Delimiter] = ["-", "--"]
-//    let fieldDelimiters: [Delimiter] = ["-", "*-"]
+//    let fieldDelimiters: [Delimiter] = ["-", "--"]
+    let fieldDelimiters: [Delimiter] = ["-", "*-"]
     let rowDelimiters: [Delimiter] = ["\n"]
 
     var configuration = CSVReader.Configuration()

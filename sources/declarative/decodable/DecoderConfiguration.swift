@@ -198,7 +198,7 @@ extension Strategy {
 
 extension CSVDecoder: Failable {
   /// The type of error raised by the CSV decoder.
-  public enum Error: Int {
+    public enum Error: Int, Sendable {
     /// Some of the configuration values provided are invalid.
     case invalidConfiguration = 1
     /// The decoding coding path is invalid.

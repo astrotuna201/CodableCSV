@@ -1,6 +1,6 @@
 /// Represents a CSV delimiter, like a field or row delimiter.
 /// The delimiter is guaranteed to never be empty.
-public struct Delimiter: Hashable, ExpressibleByStringLiteral, CustomStringConvertible {
+public struct Delimiter: Hashable, ExpressibleByStringLiteral, CustomStringConvertible, Sendable {
   let scalars: [Unicode.Scalar]
 
   /// Creates a delimiter from the given scalars.

@@ -1,7 +1,7 @@
 /// Reads CSV text data row-by-row.
 ///
 /// The `CSVReader` is a sequential reader. It reads each line only once (i.e. it cannot re-read a previous CSV row).
-public final class CSVReader: IteratorProtocol, Sequence {
+public final class CSVReader: IteratorProtocol, Sequence, @unchecked Sendable {
   /// Recipe detailing how to parse the CSV data (i.e. delimiters, date strategy, etc.).
   public let configuration: Configuration
   /// Internal reader settings extracted from the public `configuration` and other values inferred during initialization.
@@ -32,7 +32,7 @@ public final class CSVReader: IteratorProtocol, Sequence {
   /// - parameter buffer: A buffer storing in-flight `Unicode.Scalar`s.
   /// - parameter decoder: The instance providing the input `Unicode.Scalar`s.
   /// - throws: `CSVError<CSVReader>` exclusively.
-  init(configuration: Configuration, buffer: ScalarBuffer, decoder: @escaping ScalarDecoder) throws {
+    init(configuration: Configuration, buffer: ScalarBuffer, decoder: @escaping ScalarDecoder) throws {
     self.configuration = configuration
     self._settings = try Settings(configuration: configuration, decoder: decoder, buffer: buffer)
     (self.headers, self.headerLookup) = (Array(), nil)
